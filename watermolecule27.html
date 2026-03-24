@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquid Water + Chemical Reactions (Optimized)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #e8e8e8; font-family: sans-serif; } /* Lighter background for better contrast */
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 20px;
+            border-radius: 10px;
+            color: #eee;
+            border-left: 5px solid #00d2ff;
+            width: 320px;
+            transition: opacity 0.3s, transform 0.3s, visibility 0.3s;
+            pointer-events: auto;
+            z-index: 100;
+        }
+        #info.hidden {
+            opacity: 0;
+            transform: translateX(-50px);
+            visibility: hidden;
+            pointer-events: none;
+        }
+        h1 { margin: 0 0 10px 0; font-size: 18px; }
+        p { margin: 5px 0; font-size: 13px; line-height: 1.5; color: #ccc; }
+        .stat-value { font-size: 24px; color: #00d2ff; font-weight: bold; font-family: monospace; }
+        .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+        .reaction-log {
+            margin-top: 15px;
+            font-size: 11px;
+            color: #66ff66;
+            height: 80px;
+            overflow: hidden;
+        }
+        .ion-text { color: #ff6b6b; }
+        .hydronium-text { color: #00d2ff; }
+        .hydroxide-text { color: #00ff88; }
+        .config-group { margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; }
+        label { display: block; margin: 5px 0; font-size: 12px; }
+        input[type="number"], select { width: 100%; padding: 5px; background: #333; border: 1px solid #555; border-radius: 3px; color: white; }
+        button { width: 100%; padding: 10px; background: #00d2ff; border: none; border-radius: 5px; color: #111; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #00b8e8; }
+        
+        /* Toggle Button moved to top-right to avoid overlap */
+        #togglePanel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            left: auto; /* Reset left */
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #00d2ff;
+            color: #00d2ff;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200; /* Ensure it's always above the panel */
+            transition: background 0.2s, transform 0.1s;
+        }
+        #togglePanel:hover { 
+            background: rgba(0, 210, 255, 0.2); 
+            transform: scale(1.05);
+        }
+        #togglePanel:active { transform: scale(0.95); }
+
+        .perf-indicator {
+            margin-top: 15px;
+            font-size: 11px;
+            color: #888;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+        .perf-good { color: #00ff88; }
+        .perf-warning { color: #ffcc00; }
+        .perf-bad { color: #ff4444; }
+    </style>
+</head>
+<body>
+
+<!-- Toggle Button moved to Top-Right -->
+<div id="togglePanel" title="Show/Hide Stats Panel">☰</div>
+
+<div id="info">
+    <h1>Liquid Water + Chemical Reactions</h1>
+    
+    <div class="config-group">
+        <label>Water Molecules</label>
+        <input type="number" id="waterCount" value="500" min="100" max="50000" step="100">
+    </div>
+    
+    <div class="config-group">
+        <label>Methane Molecules</label>
+        <input type="number" id="methaneCount" value="10" min="0" max="500">
+    </div>
+    
+    <div class="config-group">
+        <label>Quality Level</label>
+        <select id="qualityLevel">
+            <option value="high">High (Detailed, Slower)</option>
+            <option value="medium" selected>Medium (Balanced)</option>
+            <option value="low">Low (Fast, Dots Only)</option>
+        </select>
+    </div>
+    
+    <button id="restartBtn">Reset Simulation</button>
+
+    <p>
+        <span class="stat-label">Average O-O Distance</span><br>
+        <span id="val" class="stat-value">Calculating...</span> <span style="font-size:14px; color:#888">Ångströms</span>
+    </p>
+    <p>
+        <span class="stat-label">pH Level (approximate)</span><br>
+        <span id="ph" class="stat-value">7.00</span>
+    </p>
+    <p>
+        <span class="stat-label">FPS</span><br>
+        <span id="fps" class="stat-value">60</span>
+    </p>
+    <p>
+        <span class="stat-label">Molecules</span><br>
+        <span id="moleculeCount">500 H₂O</span>
+    </p>
+    
+    <div class="perf-indicator">
+        <span class="stat-label">Grid Cell Size</span><br>
+        <span id="gridSize" style="color:#00d2ff">120px</span>
+        <br>
+        <span class="stat-label">Total Molecules</span><br>
+        <span id="totalMol" style="color:#ffffff">0</span>
+    </div>
+    
+    <p style="font-size:11px; color:#888; margin-top:10px;">
+        Scale: OH bond = 0.96Å ≈ 10px (2.8Å O-O ≈ 29px)<br>
+        2 CH₄ → C₂H₆ + H₂ (collisions)<br>
+        2 H₂O ⇌ H₃O⁺ + OH⁻ (autoionization ~1% of H₂O)
+    </p>
+    <p class="reaction-log" id="reactionLog"></p>
+</div>
+
+<canvas id="simCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const valEl = document.getElementById('val');
+    const fpsEl = document.getElementById('fps');
+    const moleculeCountEl = document.getElementById('moleculeCount');
+    const phEl = document.getElementById('ph');
+    const reactionLogEl = document.getElementById('reactionLog');
+    const restartBtn = document.getElementById('restartBtn');
+    const waterInput = document.getElementById('waterCount');
+    const methaneInput = document.getElementById('methaneCount');
+    const qualityInput = document.getElementById('qualityLevel');
+    const toggleBtn = document.getElementById('togglePanel');
+    const infoPanel = document.getElementById('info');
+    const gridSizeEl = document.getElementById('gridSize');
+    const totalMolEl = document.getElementById('totalMol');
+
+    // Simulation parameters
+    let waterMoleculeCount = parseInt(waterInput.value);
+    let methaneMoleculeCount = parseInt(methaneInput.value);
+    let qualityLevel = qualityInput.value;
+    const gridCellSize = 120; // Larger grid for better performance
+    
+    const PIXELS_PER_ANGSTROM = 10.4;
+    const REACTION_DISTANCE_CH4 = 55;
+    const REACTION_DISTANCE_IONS = 50;
+    
+    const AUTOIONIZATION_PROBABILITY = 0.02;
+    const AUTOIONIZATION_COOLDOWN = 30;
+    const ION_RECOMBINATION_COOLDOWN = 60;
+    
+    let reactionCooldown = 0;
+    let currentFrame = 0;
+
+    let width, height;
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Toggle panel functionality
+    toggleBtn.addEventListener('click', () => {
+        infoPanel.classList.toggle('hidden');
+    });
+
+    class Molecule {
+        constructor(type = 'H2O', createdFrame = 0) {
+            this.type = type;
+            this.createdFrame = createdFrame;
+            this.reset();
+        }
+
+        reset() {
+            this.x = Math.random() * width;
+            this.y = Math.random() * height;
+            const speed = Math.random() * 0.4 + 0.2;
+            const angle = Math.random() * Math.PI * 2;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.angle = Math.random() * Math.PI * 2;
+            this.rotSpeed = (Math.random() - 0.5) * 0.02;
+        }
+
+        canRecombine() {
+            if (this.type === 'H3O+' || this.type === 'OH-') {
+                return (currentFrame - this.createdFrame) >= ION_RECOMBINATION_COOLDOWN;
+            }
+            return true;
+        }
+
+        draw(ctx, quality) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle);
+            
+            switch(this.type) {
+                case 'H2O': this.drawWater(ctx, quality); break;
+                case 'CH4': this.drawMethane(ctx, quality); break;
+                case 'C2H6': this.drawEthane(ctx, quality); break;
+                case 'H2': this.drawHydrogen(ctx, quality); break;
+                case 'H3O+': this.drawHydronium(ctx, quality); break;
+                case 'OH-': this.drawHydroxide(ctx, quality); break;
+            }
+            
+            ctx.restore();
+        }
+
+        drawWater(ctx, quality) {
+            if (quality === 'low') {
+                ctx.beginPath();
+                ctx.fillStyle = '#ff4d4d';
+                ctx.arc(0, 0, 3, 0, Math.PI * 2);
+                ctx.fill();
+                return;
+            }
+            
+            ctx.beginPath();
+            ctx.fillStyle = '#ff4d4d';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#ff0000';
+            ctx.arc(0, 0, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#ffffff';
+            const bondLen = 10;
+            const bondAngle = 52.25 * (Math.PI/180);
+
+            ctx.beginPath();
+            ctx.arc(-bondLen * Math.sin(bondAngle), bondLen * Math.cos(bondAngle), 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(bondLen * Math.sin(bondAngle), bondLen * Math.cos(bondAngle), 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        drawMethane(ctx, quality) {
+            if (quality === 'low') {
+                ctx.beginPath();
+                ctx.fillStyle = '#000000'; // Carbon is black
+                ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+                return;
+            }
+            
+            ctx.beginPath();
+            ctx.fillStyle = '#000000'; // Carbon is black
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = '#000000';
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#ffffff';
+            const bondLen = 12;
+            const angles = [0, 90, 180, 270];
+
+            angles.forEach(angleRad => {
+                const rad = angleRad * Math.PI / 180;
+                ctx.beginPath();
+                ctx.arc(bondLen * Math.cos(rad), bondLen * Math.sin(rad), 2.5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        drawEthane(ctx, quality) {
+            if (quality === 'low') {
+                ctx.beginPath();
+                ctx.fillStyle = '#808080';
+                ctx.arc(0, 0, 5, 0, Math.PI * 2);
+                ctx.fill();
+                return;
+            }
+            
+            const cxC = 16;
+            const bondLen = 14;
+            const hRad = 2.8;
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 3;
+            ctx.moveTo(-cxC/2 + 6, 0);
+            ctx.lineTo(cxC/2 - 6, 0);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.fillStyle = '#000000';
+            ctx.shadowBlur = 6;
+            ctx.shadowColor = '#000000';
+            ctx.arc(-cxC/2, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(cxC/2, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            const leftH = [[-20, -10], [-20, 10], [-32, 0]];
+            const rightH = [[20, -8], [20, 8], [32, 0]];
+
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = '#ffffff';
+            leftH.forEach(([x, y]) => {
+                ctx.beginPath();
+                ctx.arc(-cxC/2 + x, y, hRad, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            rightH.forEach(([x, y]) => {
+                ctx.beginPath();
+                ctx.arc(cxC/2 + x, y, hRad, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.shadowBlur = 0;
+        }
+
+        drawHydrogen(ctx, quality) {
+            if (quality === 'low') {
+                ctx.beginPath();
+                ctx.fillStyle = '#ffffff';
+                ctx.arc(0, 0, 2, 0, Math.PI * 2);
+                ctx.fill();
+                return;
+            }
+            
+            const bondLen = 8;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = '#ffffff';
+
+            ctx.beginPath();
+            ctx.arc(-bondLen/2, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(bondLen/2, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 2;
+            ctx.moveTo(-bondLen/2 + 3, 0);
+            ctx.lineTo(bondLen/2 - 3, 0);
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+        }
+
+        drawHydronium(ctx, quality) {
+            if (quality === 'low') {
+                ctx.beginPath();
+                ctx.fillStyle = '#ff6b6b';
+                ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+                return;
+            }
+            
+            const bondLen = 12;
+            const hRad = 2.8;
+
+            ctx.beginPath();
+            ctx.fillStyle = '#ff6b6b';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#ff0000';
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = '#ff6b6b';
+
+            ctx.fillStyle = '#00d2ff';
+            ctx.font = 'bold 8px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('+', 0, 0);
+
+            const hPositions = [
+                [0, -bondLen],
+                [bondLen * 0.866, bondLen * 0.5],
+                [-bondLen * 0.866, bondLen * 0.5]
+            ];
+
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#ffffff';
+            hPositions.forEach(([x, y]) => {
+                ctx.beginPath();
+                ctx.arc(x, y, hRad, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.shadowBlur = 0;
+        }
+
+        drawHydroxide(ctx, quality) {
+            if (quality === 'low') {
+                ctx.beginPath();
+                ctx.fillStyle = '#4facfe';
+                ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+                return;
+            }
+            
+            const bondLen = 12;
+            const hRad = 2.5;
+
+            ctx.beginPath();
+            ctx.fillStyle = '#4facfe';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#00d2ff';
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = '#4facfe';
+
+            ctx.fillStyle = '#ff6b6b';
+            ctx.font = 'bold 8px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('-', 0, 0);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(0, -bondLen, hRad, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.shadowBlur = 0;
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.angle += this.rotSpeed;
+
+            // Improved wall collision logic to prevent sticking
+            const boundaryOffset = 10; // Buffer to push back inside
+            
+            if (this.x < 0) {
+                this.x = boundaryOffset; // Push inside
+                this.vx = Math.abs(this.vx) * (0.8 + Math.random() * 0.4); // Dampened and randomized bounce
+                this.vx += (Math.random() - 0.5) * 0.5; // Add vertical spread
+            } else if (this.x > width) {
+                this.x = width - boundaryOffset; // Push inside
+                this.vx = -Math.abs(this.vx) * (0.8 + Math.random() * 0.4);
+                this.vx -= (Math.random() - 0.5) * 0.5;
+            }
+            
+            if (this.y < 0) {
+                this.y = boundaryOffset; // Push inside
+                this.vy = Math.abs(this.vy) * (0.8 + Math.random() * 0.4);
+                this.vy += (Math.random() - 0.5) * 0.5;
+            } else if (this.y > height) {
+                this.y = height - boundaryOffset; // Push inside
+                this.vy = -Math.abs(this.vy) * (0.8 + Math.random() * 0.4);
+                this.vy -= (Math.random() - 0.5) * 0.5;
+            }
+        }
+    }
+
+    // Spatial grid for collision detection (optimized)
+    let grid = [];
+    let gridCols = 0;
+    let gridRows = 0;
+    let gridTotal = 0;
+
+    function getGridKey(x, y) {
+        const cellX = Math.floor(x / gridCellSize);
+        const cellY = Math.floor(y / gridCellSize);
+        const cellIndex = cellY * gridCols + cellX;
+        return cellIndex;
+    }
+
+    function buildGrid() {
+        gridCols = Math.ceil(width / gridCellSize);
+        gridRows = Math.ceil(height / gridCellSize);
+        gridTotal = gridCols * gridRows;
+        
+        // Pre-allocate grid array with defined size to prevent index errors
+        grid = new Array(gridTotal);
+        for (let i = 0; i < gridTotal; i++) {
+            grid[i] = [];
+        }
+        
+        for (let i = 0; i < molecules.length; i++) {
+            const key = getGridKey(molecules[i].x, molecules[i].y);
+            if (key >= 0 && key < gridTotal) {
+                grid[key].push(i);
+            }
+        }
+        
+        gridSizeEl.textContent = gridCellSize + "px (" + gridCols + "x" + gridRows + ")";
+    }
+
+    function getNearbyIndices(x, y, distance) {
+        const nearby = [];
+        const cellRadius = Math.ceil(distance / gridCellSize);
+        
+        const cellX = Math.floor(x / gridCellSize);
+        const cellY = Math.floor(y / gridCellSize);
+        
+        for (let dx = -cellRadius; dx <= cellRadius; dx++) {
+            for (let dy = -cellRadius; dy <= cellRadius; dy++) {
+                const adjX = cellX + dx;
+                const adjY = cellY + dy;
+                
+                // Bounds check against grid dimensions
+                if (adjX >= 0 && adjX < gridCols && adjY >= 0 && adjY < gridRows) {
+                    const cellIndex = adjY * gridCols + adjX;
+                    if (cellIndex >= 0 && cellIndex < gridTotal) {
+                        nearby.push(...grid[cellIndex]);
+                    }
+                }
+            }
+        }
+        
+        return nearby;
+    }
+
+    let molecules = [];
+
+    function initMolecules() {
+        molecules = [];
+        for (let i = 0; i < waterMoleculeCount; i++) { molecules.push(new Molecule('H2O')); }
+        for (let i = 0; i < methaneMoleculeCount; i++) { molecules.push(new Molecule('CH4')); }
+        totalMolEl.textContent = molecules.length;
+    }
+
+    let waterPairsForAutoionization = [];
+
+    function physicsAndMeasure() {
+        let sumDist = 0;
+        let waterCount = 0;
+        let validDistances = 0;
+        let reactedIndices = new Set();
+        waterPairsForAutoionization = [];
+
+        if (reactionCooldown > 0) reactionCooldown--;
+
+        buildGrid();
+
+        for (let i = 0; i < molecules.length; i++) {
+            let m1 = molecules[i];
+            if (m1.type === 'H2O') {
+                waterCount++;
+                let minDist = Infinity;
+
+                let nearby = getNearbyIndices(m1.x, m1.y, REACTION_DISTANCE_IONS + 20);
+                
+                for (let k = 0; k < nearby.length; k++) {
+                    let j = nearby[k];
+                    if (i === j || reactedIndices.has(i) || reactedIndices.has(j)) continue;
+                    
+                    let m2 = molecules[j];
+                    let dx = m1.x - m2.x;
+                    let dy = m1.y - m2.y;
+                    let distSq = dx*dx + dy*dy;
+                    let dist = Math.sqrt(distSq);
+
+                    if (dist < minDist) { minDist = dist; }
+
+                    let repulsionDistSq = (m1.type === 'H2O' && m2.type === 'H2O') ? 2500 : 3025;
+                    if (distSq < repulsionDistSq) {
+                        let dist = Math.sqrt(distSq);
+                        let force = (Math.sqrt(repulsionDistSq) - dist) / Math.sqrt(repulsionDistSq);
+                        let angle = Math.atan2(dy, dx);
+                        
+                        let m1Mass = (m1.type === 'H2O') ? 1.0 : (m1.type === 'C2H6' ? 1.2 : 0.8);
+                        let m2Mass = (m2.type === 'H2O') ? 1.0 : (m2.type === 'C2H6' ? 1.2 : 0.8);
+                        
+                        let fx = Math.cos(angle) * force * 0.3 * m2Mass;
+                        let fy = Math.sin(angle) * force * 0.3 * m2Mass;
+                        m1.vx += fx * m2Mass; m1.vy += fy * m2Mass;
+                        m2.vx -= fx * m1Mass; m2.vy -= fy * m1Mass;
+
+                        if (m2.type === 'H2O' && !reactedIndices.has(i) && !reactedIndices.has(j) && reactionCooldown === 0) {
+                            if (Math.random() < AUTOIONIZATION_PROBABILITY) {
+                                reactedIndices.add(i);
+                                reactedIndices.add(j);
+                                reactionCooldown = AUTOIONIZATION_COOLDOWN;
+                                waterPairsForAutoionization.push([i, j]);
+                                logReaction('2 H₂O ⇌ H₃O⁺ + OH⁻ (autoionization)');
+                            }
+                        }
+                    }
+                }
+                
+                if (minDist < Infinity) {
+                    sumDist += minDist;
+                    validDistances++;
+                }
+            }
+
+            if (m1.type === 'CH4' && !reactedIndices.has(i) && reactionCooldown === 0) {
+                let nearby = getNearbyIndices(m1.x, m1.y, REACTION_DISTANCE_CH4 + 20);
+                
+                for (let k = 0; k < nearby.length; k++) {
+                    let j = nearby[k];
+                    if (j <= i || reactedIndices.has(i) || reactedIndices.has(j)) continue;
+                    
+                    let m2 = molecules[j];
+                    
+                    if (m2.type === 'CH4') {
+                        let dx = m1.x - m2.x;
+                        let dy = m1.y - m2.y;
+                        let dist = Math.sqrt(dx*dx + dy*dy);
+
+                        if (dist < REACTION_DISTANCE_CH4) {
+                            reactedIndices.add(i);
+                            reactedIndices.add(j);
+                            reactionCooldown = 30;
+                            logReaction('2 CH₄ → C₂H₆ + H₂');
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        let avgDist = 0;
+        if (validDistances > 0) {
+            avgDist = sumDist / validDistances;
+        }
+        
+        return { avgDist, reactedIndices };
+    }
+
+    function logReaction(msg) {
+        const timestamp = new Date().toLocaleTimeString().split(' ')[0];
+        const entry = `[${timestamp}] ${msg}`;
+        reactionLogEl.innerText = entry + '\n' + reactionLogEl.innerText;
+        const lines = reactionLogEl.innerText.split('\n');
+        if (lines.length > 4) {
+            reactionLogEl.innerText = lines.slice(0, 4).join('\n');
+        }
+    }
+
+    function processReactions(reactedIndices) {
+        const newMolecules = [];
+        const consumedIndices = new Set();
+
+        // First: Process ion recombination (priority)
+        for (let i = 0; i < molecules.length; i++) {
+            if (reactedIndices.has(i) || consumedIndices.has(i)) continue;
+            
+            const m1 = molecules[i];
+            
+            if ((m1.type === 'H3O+' || m1.type === 'OH-') && m1.canRecombine()) {
+                let nearby = getNearbyIndices(m1.x, m1.y, REACTION_DISTANCE_IONS + 20);
+                
+                for (let k = 0; k < nearby.length; k++) {
+                    let j = nearby[k];
+                    if (j <= i || reactedIndices.has(j) || consumedIndices.has(j)) continue;
+                    
+                    const m2 = molecules[j];
+                    
+                    if ((m2.type === 'H3O+' || m2.type === 'OH-') && m2.canRecombine()) {
+                        if ((m1.type === 'H3O+' && m2.type === 'OH-') || (m1.type === 'OH-' && m2.type === 'H3O+')) {
+                            let dx = m1.x - m2.x;
+                            let dy = m1.y - m2.y;
+                            let dist = Math.sqrt(dx*dx + dy*dy);
+                            
+                            if (dist < REACTION_DISTANCE_IONS) {
+                                const midX = (m1.x + m2.x) / 2;
+                                const midY = (m1.y + m2.y) / 2;
+                                const midVx = (m1.vx + m2.vx) / 2;
+                                const midVy = (m1.vy + m2.vy) / 2;
+                                
+                                for (let k = 0; k < 2; k++) {
+                                    const h2o = new Molecule('H2O');
+                                    h2o.x = midX + (Math.random() - 0.5) * 10;
+                                    h2o.y = midY + (Math.random() - 0.5) * 10;
+                                    h2o.vx = midVx + (Math.random() - 0.5) * 0.5;
+                                    h2o.vy = midVy + (Math.random() - 0.5) * 0.5;
+                                    newMolecules.push(h2o);
+                                }
+                                
+                                logReaction('H₃O⁺ + OH⁻ → 2 H₂O (recombination)');
+                                consumedIndices.add(i);
+                                consumedIndices.add(j);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (m1.type === 'CH4') {
+                let nearby = getNearbyIndices(m1.x, m1.y, REACTION_DISTANCE_CH4 + 20);
+                
+                for (let k = 0; k < nearby.length; k++) {
+                    let j = nearby[k];
+                    if (j <= i || reactedIndices.has(j) || consumedIndices.has(j)) continue;
+                    
+                    const m2 = molecules[j];
+                    
+                    if (m2.type === 'CH4') {
+                        let dx = m1.x - m2.x;
+                        let dy = m1.y - m2.y;
+                        let dist = Math.sqrt(dx*dx + dy*dy);
+                        
+                        if (dist < REACTION_DISTANCE_CH4) {
+                            const midX = (m1.x + m2.x) / 2;
+                            const midY = (m1.y + m2.y) / 2;
+                            const midVx = (m1.vx + m2.vx) / 2;
+                            const midVy = (m1.vy + m2.vy) / 2;
+                            
+                            const ethane = new Molecule('C2H6');
+                            ethane.x = midX;
+                            ethane.y = midY;
+                            ethane.vx = midVx;
+                            ethane.vy = midVy;
+                            newMolecules.push(ethane);
+                            
+                            const hydrogen = new Molecule('H2');
+                            hydrogen.x = midX + (Math.random() - 0.5) * 5;
+                            hydrogen.y = midY + (Math.random() - 0.5) * 5;
+                            hydrogen.vx = midVx + (Math.random() - 0.5) * 0.5;
+                            hydrogen.vy = midVy + (Math.random() - 0.5) * 0.5;
+                            newMolecules.push(hydrogen);
+                            
+                            logReaction('2 CH₄ → C₂H₆ + H₂');
+                            consumedIndices.add(i);
+                            consumedIndices.add(j);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (!consumedIndices.has(i)) {
+                newMolecules.push(molecules[i]);
+            }
+        }
+        
+        // Add autoionization products
+        for (let pair of waterPairsForAutoionization) {
+            const i = pair[0];
+            const j = pair[1];
+            
+            if (i >= 0 && i < molecules.length && j >= 0 && j < molecules.length) {
+                const m1 = molecules[i];
+                const m2 = molecules[j];
+                
+                const midX = (m1.x + m2.x) / 2;
+                const midY = (m1.y + m2.y) / 2;
+                const midVx = (m1.vx + m2.vx) / 2;
+                const midVy = (m1.vy + m2.vy) / 2;
+                
+                const ionOffset = (Math.random() - 0.5) * 80;
+                
+                const hydronium = new Molecule('H3O+', currentFrame);
+                hydronium.x = midX + ionOffset;
+                hydronium.y = midY;
+                hydronium.vx = midVx + (Math.random() - 0.5) * 0.5;
+                hydronium.vy = midVy + (Math.random() - 0.5) * 0.5;
+                newMolecules.push(hydronium);
+                
+                const hydroxide = new Molecule('OH-', currentFrame);
+                hydroxide.x = midX - ionOffset;
+                hydroxide.y = midY;
+                hydroxide.vx = midVx + (Math.random() - 0.5) * 0.5;
+                hydroxide.vy = midVy + (Math.random() - 0.5) * 0.5;
+                newMolecules.push(hydroxide);
+            }
+        }
+        
+        molecules = newMolecules;
+        totalMolEl.textContent = molecules.length;
+    }
+
+    function updateUI(avgDist) {
+        const displayDist = isFinite(avgDist) ? avgDist.toFixed(2) : 'N/A';
+        valEl.innerText = displayDist;
+        
+        if (isFinite(avgDist) && avgDist < 3.2) { valEl.style.color = '#4facfe'; }
+        else if (isFinite(avgDist) && avgDist > 4.0) { valEl.style.color = '#ff6b6b'; }
+        else { valEl.style.color = '#ffcc00'; }
+
+        let h2o = 0, ch4 = 0, c2h6 = 0, h2 = 0, h3o = 0, oh = 0;
+        molecules.forEach(m => {
+            if (m.type === 'H2O') h2o++;
+            if (m.type === 'CH4') ch4++;
+            if (m.type === 'C2H6') c2h6++;
+            if (m.type === 'H2') h2++;
+            if (m.type === 'H3O+') h3o++;
+            if (m.type === 'OH-') oh++;
+        });
+        
+        moleculeCountEl.innerHTML = `${h2o} H₂O + ${ch4} CH₄ + ${c2h6} C₂H₆ + ${h2} H₂ + <span class="hydronium-text">${h3o} H₃O⁺</span> + <span class="hydroxide-text">${oh} OH⁻</span>`;
+        
+        const total = h2o + h3o + oh;
+        if (total > 0) {
+            const h3o_conc = h3o / total;
+            const ph = -Math.log10(h3o_conc + 0.000001);
+            phEl.innerText = ph.toFixed(2);
+        } else {
+            phEl.innerText = '7.00';
+        }
+    }
+
+    let lastTime = Date.now();
+    let frameCount = 0;
+
+    function draw() {
+        currentFrame++;
+        ctx.fillStyle = '#414245'; // Match body background
+        ctx.fillRect(0, 0, width, height);
+
+        let { avgDist, reactedIndices } = physicsAndMeasure();
+        processReactions(reactedIndices);
+        
+        molecules.forEach(m => m.update());
+        molecules.forEach(m => m.draw(ctx, qualityLevel));
+
+        updateUI(avgDist);
+
+        frameCount++;
+        const now = Date.now();
+        if (now - lastTime >= 1000) {
+            fpsEl.innerText = frameCount;
+            // Color code FPS
+            if (frameCount > 50) fpsEl.className = "stat-value perf-good";
+            else if (frameCount > 20) fpsEl.className = "stat-value perf-warning";
+            else fpsEl.className = "stat-value perf-bad";
+            
+            frameCount = 0;
+            lastTime = now;
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    restartBtn.addEventListener('click', () => {
+        waterMoleculeCount = parseInt(waterInput.value);
+        methaneMoleculeCount = parseInt(methaneInput.value);
+        qualityLevel = qualityInput.value;
+        initMolecules();
+    });
+
+    initMolecules();
+    draw();
+</script>
+</body>
+</html>

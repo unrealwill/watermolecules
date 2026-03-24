@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquid Water: Nearest Neighbor Distance</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; font-family: sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            color: #eee;
+            border-left: 5px solid #00d2ff;
+            width: 300px;
+        }
+        h1 { margin: 0 0 10px 0; font-size: 18px; }
+        p { margin: 5px 0; font-size: 13px; line-height: 1.5; color: #ccc; }
+        .stat-value { font-size: 24px; color: #00d2ff; font-weight: bold; font-family: monospace; }
+        .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+    </style>
+</head>
+<body>
+
+<div id="info">
+    <h1>Nearest Neighbor Measurement</h1>
+    <p>
+        <span class="stat-label">Measured Distance</span><br>
+        <span id="val" class="stat-value">Calculating...</span> <span style="font-size:14px; color:#888">Ångströms</span>
+    </p>
+    <p>
+        The simulation below actively searches for the closest Oxygen atom to the selected "Probe" molecule.
+        In liquid water, this value typically hovers around <strong>2.75 - 2.85 Å</strong>.
+    </p>
+</div>
+
+<canvas id="simCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const valEl = document.getElementById('val');
+
+    let width, height;
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    class Molecule {
+        constructor() {
+            this.reset();
+        }
+
+        reset() {
+            this.x = Math.random() * width;
+            this.y = Math.random() * height;
+            // Velocity
+            const speed = Math.random() * 0.3; 
+            const angle = Math.random() * Math.PI * 2;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            // Rotation
+            this.angle = Math.random() * Math.PI * 2;
+            this.rotSpeed = (Math.random() - 0.5) * 0.02;
+            
+            // Mark if this is the currently "Measured" molecule
+            this.isProbe = false;
+        }
+
+        draw(ctx, isNearestNeighbor) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle);
+
+            // Visual distinction
+            if (this.isProbe) {
+                ctx.strokeStyle = '#00d2ff';
+                ctx.lineWidth = 2;
+            } else if (isNearestNeighbor) {
+                ctx.strokeStyle = '#00ff88'; // Neighbor color
+                ctx.lineWidth = 1;
+            } else {
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                ctx.lineWidth = 0.5;
+            }
+            
+            // Draw faint outline
+            ctx.beginPath();
+            ctx.arc(0, 0, 8, 0, Math.PI*2);
+            ctx.stroke();
+
+            // Draw Oxygen (Red Core)
+            ctx.beginPath();
+            ctx.fillStyle = '#ff4d4d';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#ff0000';
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0; // Reset shadow
+
+            // Draw Hydrogens (White)
+            ctx.fillStyle = '#ffffff';
+            const bondLen = 10; // Arbitrary screen space units
+            const bondAngle = 52.25 * (Math.PI/180); // 104.5 / 2
+
+            ctx.beginPath();
+            ctx.arc(-bondLen * Math.sin(bondAngle), bondLen * Math.cos(bondAngle), 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(bondLen * Math.sin(bondAngle), bondLen * Math.cos(bondAngle), 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.angle += this.rotSpeed;
+
+            if (this.x < 0 || this.x > width) this.vx *= -1;
+            if (this.y < 0 || this.y > height) this.vy *= -1;
+            
+            if (this.x < 0) this.x = 0;
+            if (this.x > width) this.x = width;
+            if (this.y < 0) this.y = 0;
+            if (this.y > height) this.y = height;
+        }
+    }
+
+    const molecules = [];
+    const count = 500;
+    for (let i = 0; i < count; i++) {
+        molecules.push(new Molecule());
+    }
+
+    // Physics: Soft repulsion to prevent overlap
+    function physics() {
+        for (let i = 0; i < molecules.length; i++) {
+            let m1 = molecules[i];
+            // Only check neighbors roughly every 2nd molecule for performance
+            for (let j = i + 1; j < molecules.length; j+=2) { 
+                let m2 = molecules[j];
+                let dx = m1.x - m2.x;
+                let dy = m1.y - m2.y;
+                let distSq = dx*dx + dy*dy;
+                
+                if (distSq < 3600) { // Within 60 pixels
+                    let dist = Math.sqrt(distSq);
+                    let force = (60 - dist) / 60; 
+                    let angle = Math.atan2(dy, dx);
+                    let fx = Math.cos(angle) * force * 0.5;
+                    let fy = Math.sin(angle) * force * 0.5;
+                    
+                    m1.vx += fx; m1.vy += fy;
+                    m2.vx -= fx; m2.vy -= fy;
+                }
+            }
+        }
+    }
+
+    // --- The Core Fix: Finding the Nearest Neighbor ---
+    let probeMolecule = molecules[0];
+
+    function findNearestNeighbor() {
+        let minDist = Infinity;
+        let nearestNeighbor = null;
+
+        // Pick a random "Probe" molecule
+        probeMolecule.isProbe = false;
+        let randomIndex = Math.floor(Math.random() * molecules.length);
+        probeMolecule = molecules[randomIndex];
+        probeMolecule.isProbe = true;
+
+        // Search through ALL other molecules to find the closest one
+        for (let i = 0; i < molecules.length; i++) {
+            if (molecules[i] === probeMolecule) continue;
+
+            let dx = probeMolecule.x - molecules[i].x;
+            let dy = probeMolecule.y - molecules[i].y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (dist < minDist) {
+                minDist = dist;
+                nearestNeighbor = molecules[i];
+            }
+        }
+
+        // Convert pixels to Angstroms roughly (based on visual scale)
+        // 1 Pixel approx 0.33 Angstroms in this scale
+        let distanceA = (minDist / 0.33).toFixed(2);
+        
+        valEl.innerText = distanceA;
+        
+        // Highlight the neighbor
+        return nearestNeighbor;
+    }
+
+    function draw() {
+        // Clear with trail effect
+        ctx.fillStyle = 'rgba(17, 17, 17, 0.3)';
+        ctx.fillRect(0, 0, width, height);
+
+        // Find neighbor (runs once per frame to update the laser target)
+        let neighbor = findNearestNeighbor();
+
+        // Draw all molecules
+        molecules.forEach(m => {
+            let isNeighbor = (m === neighbor);
+            m.draw(ctx, isNeighbor);
+            
+            // Draw the laser beam
+            if (isNeighbor) {
+                ctx.beginPath();
+                ctx.moveTo(probeMolecule.x, probeMolecule.y);
+                ctx.lineTo(m.x, m.y);
+                ctx.strokeStyle = '#00ff88'; // Neon Green
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Add a glow around the line
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#00ff88';
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+        });
+
+        physics();
+        requestAnimationFrame(draw);
+    }
+
+    draw();
+</script>
+</body>
+</html>

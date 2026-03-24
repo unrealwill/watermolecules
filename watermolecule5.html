@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquid Water: Nearest Neighbor (Stable)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; font-family: sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            color: #eee;
+            border-left: 5px solid #00d2ff;
+            width: 320px;
+        }
+        h1 { margin: 0 0 10px 0; font-size: 18px; }
+        p { margin: 5px 0; font-size: 13px; line-height: 1.5; color: #ccc; }
+        .stat-value { font-size: 24px; color: #00d2ff; font-weight: bold; font-family: monospace; }
+        .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+    </style>
+</head>
+<body>
+
+<div id="info">
+    <h1>Nearest Neighbor Distance</h1>
+    <p>
+        <span class="stat-label">Measured Distance</span><br>
+        <span id="val" class="stat-value">Calculating...</span> <span style="font-size:14px; color:#888">Ångströms</span>
+    </p>
+    <p>
+        <span class="stat-label">Average (20 samples)</span><br>
+        <span id="avgVal" class="stat-value">—</span> <span style="font-size:14px; color:#888">Ångströms</span>
+    </p>
+    <p>
+        <span class="stat-label">FPS</span><br>
+        <span id="fps" class="stat-value">60</span>
+    </p>
+    <p style="font-size:11px; color:#888; margin-top:10px;">
+        Scale: OH bond = 0.96Å ≈ 10px<br>
+        O-O distance = 2.8Å ≈ 29px<br>
+        Running average reduces noise from molecular motion
+    </p>
+</div>
+
+<canvas id="simCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const valEl = document.getElementById('val');
+    const avgValEl = document.getElementById('avgVal');
+    const fpsEl = document.getElementById('fps');
+
+    // Scale: pixels per Ångström (OH bond 0.96Å ≈ 10px)
+    const PIXELS_PER_ANGSTROM = 10.4;
+
+    // Running average tracking
+    const sampleWindow = 20;
+    const measurements = [];
+    let totalMeasurements = 0;
+
+    let width, height;
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    class Molecule {
+        constructor() {
+            this.reset();
+        }
+
+        reset() {
+            this.x = Math.random() * width;
+            this.y = Math.random() * height;
+            const speed = Math.random() * 0.3 + 0.1;
+            const angle = Math.random() * Math.PI * 2;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.angle = Math.random() * Math.PI * 2;
+            this.rotSpeed = (Math.random() - 0.5) * 0.02;
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle);
+
+            ctx.beginPath();
+            ctx.fillStyle = '#ff4d4d';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#ff0000';
+            ctx.arc(0, 0, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#ffffff';
+            const bondLen = 10;
+            const bondAngle = 52.25 * (Math.PI/180);
+
+            ctx.beginPath();
+            ctx.arc(-bondLen * Math.sin(bondAngle), bondLen * Math.cos(bondAngle), 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(bondLen * Math.sin(bondAngle), bondLen * Math.cos(bondAngle), 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.angle += this.rotSpeed;
+
+            if (this.x < 0 || this.x > width) this.vx *= -1;
+            if (this.y < 0 || this.y > height) this.vy *= -1;
+            
+            if (this.x < 0) this.x = 0;
+            if (this.x > width) this.x = width;
+            if (this.y < 0) this.y = 0;
+            if (this.y > height) this.y = height;
+        }
+    }
+
+    const molecules = [];
+    const count = 500;
+    for (let i = 0; i < count; i++) {
+        molecules.push(new Molecule());
+    }
+
+    let minDist = Infinity;
+    let nearestPair = null;
+
+    function physicsAndMeasure() {
+        minDist = Infinity;
+        nearestPair = null;
+
+        for (let i = 0; i < molecules.length; i++) {
+            let m1 = molecules[i];
+            for (let j = i + 1; j < molecules.length; j++) {
+                let m2 = molecules[j];
+                
+                let dx = m1.x - m2.x;
+                let dy = m1.y - m2.y;
+                let distSq = dx*dx + dy*dy;
+                let dist = Math.sqrt(distSq);
+
+                // Track closest pair
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestPair = { m1, m2 };
+                }
+
+                // Repulsion force (soft collision)
+                if (dist < 50) {
+                    let force = (50 - dist) / 50;
+                    let angle = Math.atan2(dy, dx);
+                    let fx = Math.cos(angle) * force * 0.4;
+                    let fy = Math.sin(angle) * force * 0.4;
+                    m1.vx += fx; m1.vy += fy;
+                    m2.vx -= fx; m2.vy -= fy;
+                }
+            }
+        }
+    }
+
+    function updateUI() {
+        if (nearestPair && minDist > 0) {
+            // Current measurement (instant)
+            valEl.innerText = (minDist / PIXELS_PER_ANGSTROM).toFixed(2);
+
+            // Add to running average (sliding window)
+            measurements.push(minDist / PIXELS_PER_ANGSTROM);
+            totalMeasurements++;
+            
+            if (measurements.length > sampleWindow) {
+                measurements.shift();
+            }
+
+            // Calculate average
+            const avg = measurements.reduce((a, b) => a + b, 0) / measurements.length;
+            avgValEl.innerText = avg.toFixed(2);
+
+            // Color code based on typical liquid water distance (~2.8 Å)
+            const avgNum = avgNum || avg;
+            if (avg < 3.2) {
+                valEl.style.color = '#4facfe'; // Blue - bonded/neighbor
+                avgValEl.style.color = '#4facfe';
+            } else {
+                valEl.style.color = '#ff6b6b'; // Red - far away
+                avgValEl.style.color = '#ff6b6b';
+            }
+        }
+    }
+
+    // FPS tracking
+    let lastTime = Date.now();
+    let frameCount = 0;
+
+    function draw() {
+        ctx.fillStyle = 'rgba(17, 17, 17, 0.3)';
+        ctx.fillRect(0, 0, width, height);
+
+        molecules.forEach(m => m.update());
+        physicsAndMeasure();
+        molecules.forEach(m => m.draw(ctx));
+
+        if (nearestPair && minDist > 0) {
+            ctx.beginPath();
+            ctx.moveTo(nearestPair.m1.x, nearestPair.m1.y);
+            ctx.lineTo(nearestPair.m2.x, nearestPair.m2.y);
+            ctx.strokeStyle = '#00ff88';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
+
+        updateUI();
+
+        frameCount++;
+        const now = Date.now();
+        if (now - lastTime >= 1000) {
+            fpsEl.innerText = frameCount;
+            frameCount = 0;
+            lastTime = now;
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    draw();
+</script>
+</body>
+</html>

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquid Water: Optimized Nearest Neighbor</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; font-family: sans-serif; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            color: #eee;
+            border-left: 5px solid #00d2ff;
+            width: 320px;
+        }
+        h1 { margin: 0 0 10px 0; font-size: 18px; }
+        p { margin: 5px 0; font-size: 13px; line-height: 1.5; color: #ccc; }
+        .stat-value { font-size: 24px; color: #00d2ff; font-weight: bold; font-family: monospace; }
+        .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+    </style>
+</head>
+<body>
+
+<div id="info">
+    <h1>Nearest Neighbor Distance</h1>
+    <p>
+        <span class="stat-label">Measured Distance</span><br>
+        <span id="val" class="stat-value">Calculating...</span> <span style="font-size:14px; color:#888">Ångströms</span>
+    </p>
+    <p>
+        <span class="stat-label">FPS</span><br>
+        <span id="fps" class="stat-value">60</span>
+    </p>
+    <p>
+        Distance is computed during collision force loop—no extra O(n²) pass needed.
+    </p>
+</div>
+
+<canvas id="simCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+    const valEl = document.getElementById('val');
+    const fpsEl = document.getElementById('fps');
+
+    let width, height;
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    class Molecule {
+        constructor() {
+            this.reset();
+        }
+
+        reset() {
+            this.x = Math.random() * width;
+            this.y = Math.random() * height;
+            const speed = Math.random() * 0.4 + 0.2;
+            const angle = Math.random() * Math.PI * 2;
+            this.vx = Math.cos(angle) * speed;
+            this.vy = Math.sin(angle) * speed;
+            this.angle = Math.random() * Math.PI * 2;
+            this.rotSpeed = (Math.random() - 0.5) * 0.02;
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.angle);
+
+            ctx.beginPath();
+            ctx.fillStyle = '#ff4d4d';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#ff0000';
+            ctx.arc(0, 0, 6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#ffffff';
+            const bondLen = 10;
+            const bondAngle = 52.25 * (Math.PI/180);
+
+            ctx.beginPath();
+            ctx.arc(-bondLen * Math.sin(bondAngle), bondLen * Math.cos(bondAngle), 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(bondLen * Math.sin(bondAngle), bondLen * Math.cos(bondAngle), 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            this.angle += this.rotSpeed;
+
+            if (this.x < 0 || this.x > width) this.vx *= -1;
+            if (this.y < 0 || this.y > height) this.vy *= -1;
+            
+            if (this.x < 0) this.x = 0;
+            if (this.x > width) this.x = width;
+            if (this.y < 0) this.y = 0;
+            if (this.y > height) this.y = height;
+        }
+    }
+
+    const molecules = [];
+    const count = 300;
+    for (let i = 0; i < count; i++) {
+        molecules.push(new Molecule());
+    }
+
+    // Physics & Distance Measurement
+    let minDist = Infinity;
+    let nearestPair = null;
+
+    function physicsAndMeasure() {
+        minDist = Infinity;
+        nearestPair = null;
+
+        for (let i = 0; i < molecules.length; i++) {
+            let m1 = molecules[i];
+            for (let j = i + 1; j < molecules.length; j++) {
+                let m2 = molecules[j];
+                
+                let dx = m1.x - m2.x;
+                let dy = m1.y - m2.y;
+                let distSq = dx*dx + dy*dy;
+                let dist = Math.sqrt(distSq);
+
+                // Track closest pair
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestPair = { m1, m2 };
+                }
+
+                // Repulsion force
+                if (dist < 50) {
+                    let force = (50 - dist) / 50;
+                    let angle = Math.atan2(dy, dx);
+                    let fx = Math.cos(angle) * force * 0.4;
+                    let fy = Math.sin(angle) * force * 0.4;
+                    m1.vx += fx; m1.vy += fy;
+                    m2.vx -= fx; m2.vy -= fy;
+                }
+            }
+        }
+    }
+
+    function updateUI() {
+        if (nearestPair && minDist > 0) {
+            // 1 pixel ≈ 0.33 Å
+            const distanceA = (minDist / 0.33).toFixed(2);
+            valEl.innerText = distanceA;
+        }
+    }
+
+    // FPS tracking
+    let lastTime = Date.now();
+    let frameCount = 0;
+
+    function draw() {
+        ctx.fillStyle = 'rgba(17, 17, 17, 0.3)';
+        ctx.fillRect(0, 0, width, height);
+
+        // ✅ CALL UPDATE ON ALL MOLECULES (THIS WAS MISSING!)
+        molecules.forEach(m => m.update());
+        
+        physicsAndMeasure();
+
+        // Draw all molecules
+        molecules.forEach(m => m.draw(ctx));
+
+        // Draw measurement line
+        if (nearestPair && minDist > 0) {
+            ctx.beginPath();
+            ctx.moveTo(nearestPair.m1.x, nearestPair.m1.y);
+            ctx.lineTo(nearestPair.m2.x, nearestPair.m2.y);
+            ctx.strokeStyle = '#00ff88';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+        }
+
+        updateUI();
+
+        // FPS counter
+        frameCount++;
+        const now = Date.now();
+        if (now - lastTime >= 1000) {
+            fpsEl.innerText = frameCount;
+            frameCount = 0;
+            lastTime = now;
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    draw();
+</script>
+</body>
+</html>
