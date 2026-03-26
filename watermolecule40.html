@@ -9,12 +9,10 @@
         canvas { display: block; }
         #info {
             position: absolute; top: 70px; left: 20px;
-            background: rgba(0, 0, 0, 0.85); padding: 15px;
+            background: rgba(0, 0, 0, 0.85); padding: 20px;
             border-radius: 10px; color: #eee;
-            border-left: 5px solid #00d2ff; width: 300px;
+            border-left: 5px solid #00d2ff; width: 320px;
             transition: opacity 0.3s, transform 0.3s, visibility 0.3s;
-            max-height: calc(100vh - 100px);
-            overflow-y: auto;
         }
         #info.hidden {
             opacity: 0; transform: translateX(-50px);
@@ -30,31 +28,30 @@
             align-items: center; justify-content: center;
             z-index: 101;
         }
-        .stat-value { font-size: 20px; color: #00d2ff; font-weight: bold; font-family: monospace; }
-        .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #888; }
-        .config-group { margin: 8px 0; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 5px; }
-        label { display: block; margin: 3px 0; font-size: 11px; }
-        input[type="number"], select { width: 100%; padding: 4px; background: #333; border: 1px solid #555; border-radius: 3px; color: white; font-size: 11px; }
-        button { width: 100%; padding: 8px; background: #00d2ff; border: none; border-radius: 5px; color: #111; font-weight: bold; cursor: pointer; margin-top: 8px; font-size: 11px; }
+        .stat-value { font-size: 24px; color: #00d2ff; font-weight: bold; font-family: monospace; }
+        .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #888; }
+        .config-group { margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; }
+        label { display: block; margin: 5px 0; font-size: 12px; }
+        input[type="number"], select { width: 100%; padding: 5px; background: #333; border: 1px solid #555; border-radius: 3px; color: white; }
+        button { width: 100%; padding: 10px; background: #00d2ff; border: none; border-radius: 5px; color: #111; font-weight: bold; cursor: pointer; margin-top: 10px; }
         button:hover { background: #00b8e8; }
-        .reaction-log { margin-top: 10px; font-size: 10px; color: #66ff66; height: 60px; overflow: hidden; }
+        .reaction-log { margin-top: 15px; font-size: 11px; color: #66ff66; height: 80px; overflow: hidden; }
         .ion-text { color: #ff6b6b; }
         .hydronium-text { color: #00d2ff; }
         .hydroxide-text { color: #00ff88; }
-        .perf-indicator { margin-top: 10px; font-size: 10px; color: #888; padding-top: 8px; border-top: 1px solid #444; }
+        .energy-display { margin-top: 10px; padding: 5px; background: rgba(255,255,255,0.1); border-radius: 4px; display: flex; justify-content: space-between; }
+        .perf-indicator { margin-top: 15px; font-size: 11px; color: #888; padding-top: 10px; border-top: 1px solid #444; }
         .perf-good { color: #00ff88; }
         .perf-warning { color: #ffcc00; }
         .perf-bad { color: #ff4444; }
-        .info-row { display: flex; justify-content: space-between; align-items: baseline; margin: 5px 0; }
-        .energy-display { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        #moleculeCount { color: #ffffff; }
-        h1 { margin: 0 0 10px 0; font-size: 16px; }
+        .energy-log { margin-top: 5px; font-size: 11px; color: #aaa; }
     </style>
 </head>
 <body>
 <div id="togglePanel" title="Show/Hide Stats Panel">☰</div>
 <div id="info">
     <h1>Liquid Water + Reactions</h1>
+    <p class="energy-log">Energy Status: <span id="energyStatus" style="color:#00ff88">Stable</span></p>
     <div class="config-group">
         <label>Water Molecules</label>
         <input type="number" id="waterCount" value="500" min="100" max="50000" step="100">
@@ -66,31 +63,26 @@
     <div class="config-group">
         <label>Quality Level</label>
         <select id="qualityLevel">
-            <option value="high" selected>High</option>
+            <option value="high">High</option>
+            <option value="medium" selected>Medium</option>
             <option value="low">Low</option>
         </select>
     </div>
     <button id="restartBtn">Reset</button>
-    <p class="info-row"><span class="stat-label">O-O Distance</span><span id="val" class="stat-value">0.0</span></p>
-    <p class="info-row"><span class="stat-label">pH Level</span><span id="ph" class="stat-value">7.00</span></p>
+    <p><span class="stat-label">Avg O-O Distance</span><br><span id="val" class="stat-value">0.0</span> Å</p>
+    <p><span class="stat-label">pH Level</span><br><span id="ph" class="stat-value">7.00</span></p>
     <div class="energy-display">
-        <div>
-            <span class="stat-label">Total Energy</span><br>
-            <span id="energy" class="stat-value">0.0</span> SEU
-        </div>
-        <div>
-            <span class="stat-label">Speed</span><br>
-            <span id="speed" class="stat-value">0.0</span> Å/frame
-        </div>
+        <div><span class="stat-label">Total Energy</span><br><span id="energy" class="stat-value">0.0</span> J</div>
+        <div><span class="stat-label">Temp</span><br><span id="temp" class="stat-value">25°C</span></div>
     </div>
-    <p style="font-size:9px; color:#aaa; margin-top:5px;">SEU normalized to H₂O; Speed: average molecular velocity</p>
-    <p id="moleculeCount" style="margin-top:10px; margin-bottom:10px; color:#ffffff;">0 H₂O</p>
-    <p style="font-size:10px; color:#888; margin-top:8px;">2 CH₄ → C₂H₆ + H₂ | 2 H₂O ⇌ H₃O⁺ + OH⁻</p>
+    <p><span class="stat-label">FPS</span><br><span id="fps" class="stat-value">60</span></p>
+    <p><span class="stat-label">Molecules</span><br><span id="moleculeCount">500 H₂O</span></p>
+    <div class="perf-indicator">
+        <span class="stat-label">Grid Size</span><br><span id="gridSize" style="color:#00d2ff">120px</span>
+        <br><span class="stat-label">Total Molecules</span><br><span id="totalMol" style="color:#ffffff">0</span>
+    </div>
+    <p style="font-size:11px; color:#888; margin-top:10px;">2 CH₄ → C₂H₆ + H₂ | 2 H₂O ⇌ H₃O⁺ + OH⁻</p>
     <p class="reaction-log" id="reactionLog"></p>
-    <p style="margin-top:10px; font-size:10px; color:#888;">
-        <span class="stat-label">FPS</span><br>
-        <span id="fps" class="stat-value">60</span>
-    </p>
 </div>
 <canvas id="simCanvas"></canvas>
 <script>
@@ -100,11 +92,12 @@ const moleculeCountEl = document.getElementById('moleculeCount'), phEl = documen
 const reactionLogEl = document.getElementById('reactionLog'), restartBtn = document.getElementById('restartBtn');
 const waterInput = document.getElementById('waterCount'), methaneInput = document.getElementById('methaneCount');
 const qualityInput = document.getElementById('qualityLevel'), toggleBtn = document.getElementById('togglePanel');
-const infoPanel = document.getElementById('info');
-const energyEl = document.getElementById('energy'), speedEl = document.getElementById('speed');
+const infoPanel = document.getElementById('info'), gridSizeEl = document.getElementById('gridSize');
+const totalMolEl = document.getElementById('totalMol'), energyEl = document.getElementById('energy');
+const tempEl = document.getElementById('temp'), energyStatusEl = document.getElementById('energyStatus');
 
 let waterMoleculeCount = parseInt(waterInput.value), methaneMoleculeCount = parseInt(methaneInput.value);
-let qualityLevel = qualityInput.value, gridCellSize = 120, PIXELS_PER_ANGSTROM = 10.4;
+let qualityLevel = qualityInput.value, gridCellSize = 120;
 let reactionCooldown = 0, currentFrame = 0, width, height;
 const REACTION_DISTANCE_CH4 = 55, REACTION_DISTANCE_IONS = 50;
 const AUTOIONIZATION_PROBABILITY = 0.02, AUTOIONIZATION_COOLDOWN = 30;
@@ -133,7 +126,6 @@ function resize() {
 window.addEventListener('resize', resize);
 
 toggleBtn.addEventListener('click', () => infoPanel.classList.toggle('hidden'));
-qualityInput.addEventListener('change', () => { qualityLevel = qualityInput.value; });
 
 class Molecule {
     constructor(type = 'H2O', createdFrame = 0) {
@@ -191,10 +183,10 @@ class Molecule {
         ctx.fillStyle = '#000000'; ctx.shadowBlur = 6; ctx.shadowColor = '#000000'; ctx.beginPath(); ctx.arc(-cxC/2, 0, 6, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(cxC/2, 0, 6, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
         ctx.fillStyle = '#ffffff'; ctx.shadowBlur = 4; ctx.shadowColor = '#ffffff';
-        const leftH = [[-14, -6], [-14, 6], [-20, 0]];
-        const rightH = [[14, -6], [14, 6], [20, 0]];
-        leftH.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(-cxC/2 + x, y, hRad, 0, Math.PI * 2); ctx.fill(); });
-        rightH.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(cxC/2 + x, y, hRad, 0, Math.PI * 2); ctx.fill(); }); ctx.shadowBlur = 0;
+        [[-14, -6], [-14, 6], [-20, 0], [14, -6], [14, 6], [20, 0]].forEach(([x, y]) => {
+            ctx.beginPath(); ctx.arc(-cxC/2 + x, y, hRad, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(cxC/2 + x, y, hRad, 0, Math.PI * 2); ctx.fill();
+        }); ctx.shadowBlur = 0;
     }
     drawHydrogen(ctx, quality) {
         if (quality === 'low') { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(0, 0, 2.2, 0, Math.PI * 2); ctx.fill(); return; }
@@ -234,6 +226,7 @@ class Molecule {
 function initGrid() {
     gridCols = Math.ceil(width / gridCellSize); gridRows = Math.ceil(height / gridCellSize); gridTotal = gridCols * gridRows;
     grid = new Array(gridTotal); for (let i = 0; i < gridTotal; i++) grid[i] = [];
+    gridSizeEl.textContent = gridCellSize + 'px (' + gridCols + 'x' + gridRows + ')';
 }
 function getGridKey(x, y) { const cellX = Math.floor(x / gridCellSize), cellY = Math.floor(y / gridCellSize); return cellY * gridCols + cellX; }
 function buildGrid() { for (let i = 0; i < gridTotal; i++) grid[i].length = 0; molecules.forEach((m, i) => { const key = getGridKey(m.x, m.y); if (key >= 0 && key < gridTotal) grid[key].push(i); }); }
@@ -309,6 +302,7 @@ function initMolecules() {
     molecules = [];
     for (let i = 0; i < waterMoleculeCount; i++) molecules.push(new Molecule('H2O'));
     for (let i = 0; i < methaneMoleculeCount; i++) molecules.push(new Molecule('CH4'));
+    totalMolEl.textContent = molecules.length;
 }
 let waterPairsForAutoionization = [];
 
@@ -406,56 +400,20 @@ function processReactions(reactedIndices) {
             const hydronium = new Molecule('H3O+', currentFrame); hydronium.x = midX + ionOffset; hydronium.y = midY; hydronium.vx = midVx; hydronium.vy = midVy; newMolecules.push(hydronium);
             const hydroxide = new Molecule('OH-', currentFrame); hydroxide.x = midX - ionOffset; hydroxide.y = midY; hydroxide.vx = midVx; hydroxide.vy = midVy; newMolecules.push(hydroxide);
         }
-    } molecules = newMolecules;
+    } molecules = newMolecules; totalMolEl.textContent = molecules.length;
 }
 
 function updateUI(avgDist) {
     const displayDist = isFinite(avgDist) ? avgDist.toFixed(2) : 'N/A'; valEl.innerText = displayDist;
     if (isFinite(avgDist)) { valEl.style.color = avgDist < 3.2 ? '#4facfe' : avgDist > 4.0 ? '#ff6b6b' : '#ffcc00'; }
-    
     let h2o = 0, ch4 = 0, c2h6 = 0, h2 = 0, h3o = 0, oh = 0;
-    let totalKE = 0;
-    let totalSpeed = 0;
-    molecules.forEach(m => { 
-        if (m.type === 'H2O') h2o++; 
-        if (m.type === 'CH4') ch4++; 
-        if (m.type === 'C2H6') c2h6++; 
-        if (m.type === 'H2') h2++; 
-        if (m.type === 'H3O+') h3o++; 
-        if (m.type === 'OH-') oh++;
-        
-        // Kinetic energy
-        let mass = 1.0;
-        if(m.type === 'CH4') mass = 0.89;
-        else if(m.type === 'C2H6') mass = 1.67;
-        else if(m.type === 'H2') mass = 0.11;
-        else if(m.type === 'H3O+') mass = 1.06;
-        else if(m.type === 'OH-') mass = 0.94;
-        totalKE += 0.5 * mass * (m.vx * m.vx + m.vy * m.vy);
-        
-        // Speed in Angstroms per frame
-        const speed = Math.sqrt(m.vx * m.vx + m.vy * m.vy) / PIXELS_PER_ANGSTROM;
-        totalSpeed += speed;
-    });
-    
-    // Fixed molecule count display with proper HTML span coloring
-    moleculeCountEl.innerHTML = `<span style="color:#ff4d4d">${h2o}</span> H₂O + <span style="color:#000000">${ch4}</span> CH₄ + <span style="color:#000000">${c2h6}</span> C₂H₆ + <span style="color:#ffffff">${h2}</span> H₂ + <span class="hydronium-text">${h3o}</span> H₃O⁺ + <span class="hydroxide-text">${oh}</span> OH⁻`;
-    
-    const avgEnergy = totalKE / (molecules.length || 1);
-    const avgSpeed = totalSpeed / (molecules.length || 1);
-    
-    energyEl.innerText = avgEnergy.toFixed(1);
-    energyEl.style.color = Math.abs(avgEnergy - (lastEnergy || 0)) > 0.005 ? '#ff4444' : '#00d2ff';
-    lastEnergy = avgEnergy;
-    
-    speedEl.innerText = avgSpeed.toFixed(2);
-    speedEl.style.color = '#00ff88';
-    
+    molecules.forEach(m => { if (m.type === 'H2O') h2o++; if (m.type === 'CH4') ch4++; if (m.type === 'C2H6') c2h6++; if (m.type === 'H2') h2++; if (m.type === 'H3O+') h3o++; if (m.type === 'OH-') oh++; });
+    moleculeCountEl.innerHTML = `${h2o} H₂O + ${ch4} CH₄ + ${c2h6} C₂H₆ + ${h2} H₂ + <span class="hydronium-text">${h3o} H₃O⁺</span> + <span class="hydroxide-text">${oh} OH⁻</span>`;
     const total = h2o + h3o + oh;
     if (total > 0) { const h3o_conc = h3o / total; phEl.innerText = (-Math.log10(h3o_conc + 0.000001)).toFixed(2); } else { phEl.innerText = '7.00'; }
 }
 
-let lastTime = Date.now(), frameCount = 0, lastEnergy = 0;
+let lastTime = Date.now(), frameCount = 0, previousEnergy = 0, energyTrend = "Stable";
 
 function draw() {
     currentFrame++; ctx.fillStyle = '#414245'; ctx.fillRect(0, 0, width, height);
@@ -467,6 +425,25 @@ function draw() {
     molecules.forEach(m => m.draw(ctx, qualityLevel));
     updateUI(avgDist);
 
+    let totalKE = 0;
+    for(let m of molecules) {
+        let mass = 1.0;
+        if(m.type === 'CH4') mass = 0.89;
+        else if(m.type === 'C2H6') mass = 1.67;
+        else if(m.type === 'H2') mass = 0.11;
+        else if(m.type === 'H3O+') mass = 1.06;
+        else if(m.type === 'OH-') mass = 0.94;
+        totalKE += 0.5 * mass * (m.vx * m.vx + m.vy * m.vy);
+    }
+    const avgEnergy = totalKE / molecules.length;
+
+    if (frameCount % 10 === 0) {
+        energyEl.innerText = avgEnergy.toFixed(1);
+        if (Math.abs(avgEnergy - previousEnergy) > 0.005) { energyEl.style.color = '#ff4444'; energyTrend = 'Rising (+)'; }
+        else { energyEl.style.color = '#00d2ff'; energyTrend = 'Stable'; }
+        previousEnergy = avgEnergy;
+    }
+
     frameCount++;
     const now = Date.now();
     if (now - lastTime >= 1000) {
@@ -475,10 +452,12 @@ function draw() {
         else if (frameCount > 20) fpsEl.className = 'stat-value perf-warning';
         else fpsEl.className = 'stat-value perf-bad';
         frameCount = 0; lastTime = now;
+        tempEl.innerText = '25°C'; energyStatusEl.style.color = energyTrend === 'Stable' ? '#00ff88' : '#ff4444';
+        energyStatusEl.innerText = energyTrend;
     } requestAnimationFrame(draw);
 }
 
-restartBtn.addEventListener('click', () => { waterMoleculeCount = parseInt(waterInput.value); methaneMoleculeCount = parseInt(methaneInput.value); initMolecules(); });
+restartBtn.addEventListener('click', () => { waterMoleculeCount = parseInt(waterInput.value); methaneMoleculeCount = parseInt(methaneInput.value); qualityLevel = qualityInput.value; initMolecules(); });
 resize(); initMolecules(); draw();
 </script>
 </body>

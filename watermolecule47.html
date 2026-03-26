@@ -47,7 +47,6 @@
         .perf-bad { color: #ff4444; }
         .info-row { display: flex; justify-content: space-between; align-items: baseline; margin: 5px 0; }
         .energy-display { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        #moleculeCount { color: #ffffff; }
         h1 { margin: 0 0 10px 0; font-size: 16px; }
     </style>
 </head>
@@ -84,7 +83,7 @@
         </div>
     </div>
     <p style="font-size:9px; color:#aaa; margin-top:5px;">SEU normalized to H₂O; Speed: average molecular velocity</p>
-    <p id="moleculeCount" style="margin-top:10px; margin-bottom:10px; color:#ffffff;">0 H₂O</p>
+    <p class="perf-indicator" id="moleculeCount" style="margin-top:10px; margin-bottom:10px;">0 H₂O</p>
     <p style="font-size:10px; color:#888; margin-top:8px;">2 CH₄ → C₂H₆ + H₂ | 2 H₂O ⇌ H₃O⁺ + OH⁻</p>
     <p class="reaction-log" id="reactionLog"></p>
     <p style="margin-top:10px; font-size:10px; color:#888;">
@@ -438,8 +437,7 @@ function updateUI(avgDist) {
         totalSpeed += speed;
     });
     
-    // Fixed molecule count display with proper HTML span coloring
-    moleculeCountEl.innerHTML = `<span style="color:#ff4d4d">${h2o}</span> H₂O + <span style="color:#000000">${ch4}</span> CH₄ + <span style="color:#000000">${c2h6}</span> C₂H₆ + <span style="color:#ffffff">${h2}</span> H₂ + <span class="hydronium-text">${h3o}</span> H₃O⁺ + <span class="hydroxide-text">${oh}</span> OH⁻`;
+    moleculeCountEl.innerText = `${h2o} H₂O + ${ch4} CH₄ + ${c2h6} C₂H₆ + ${h2} H₂ + <span class="hydronium-text">${h3o} H₃O⁺</span> + <span class="hydroxide-text">${oh} OH⁻</span>`;
     
     const avgEnergy = totalKE / (molecules.length || 1);
     const avgSpeed = totalSpeed / (molecules.length || 1);
