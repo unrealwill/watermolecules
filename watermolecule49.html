@@ -64,10 +64,6 @@
         <input type="number" id="methaneCount" value="10" min="0" max="500">
     </div>
     <div class="config-group">
-        <label>Energy Target</label>
-        <input type="number" id="energyTarget" value="0.4" min="0.01" max="1.0" step="0.01">
-    </div>
-    <div class="config-group">
         <label>Quality Level</label>
         <select id="qualityLevel">
             <option value="high" selected>High</option>
@@ -79,7 +75,7 @@
     <p class="info-row"><span class="stat-label">pH Level</span><span id="ph" class="stat-value">7.00</span></p>
     <div class="energy-display">
         <div>
-            <span class="stat-label">Current Energy</span><br>
+            <span class="stat-label">Total Energy</span><br>
             <span id="energy" class="stat-value">0.0</span> SEU
         </div>
         <div>
@@ -103,21 +99,18 @@ const valEl = document.getElementById('val'), fpsEl = document.getElementById('f
 const moleculeCountEl = document.getElementById('moleculeCount'), phEl = document.getElementById('ph');
 const reactionLogEl = document.getElementById('reactionLog'), restartBtn = document.getElementById('restartBtn');
 const waterInput = document.getElementById('waterCount'), methaneInput = document.getElementById('methaneCount');
-const energyInput = document.getElementById('energyTarget'), qualityInput = document.getElementById('qualityLevel');
-const toggleBtn = document.getElementById('togglePanel');
+const qualityInput = document.getElementById('qualityLevel'), toggleBtn = document.getElementById('togglePanel');
 const infoPanel = document.getElementById('info');
 const energyEl = document.getElementById('energy'), speedEl = document.getElementById('speed');
 
 let waterMoleculeCount = parseInt(waterInput.value), methaneMoleculeCount = parseInt(methaneInput.value);
-let targetEnergy = parseFloat(energyInput.value);
 let qualityLevel = qualityInput.value, gridCellSize = 120, PIXELS_PER_ANGSTROM = 10.4;
 let reactionCooldown = 0, currentFrame = 0, width, height;
 const REACTION_DISTANCE_CH4 = 55, REACTION_DISTANCE_IONS = 50;
 const AUTOIONIZATION_PROBABILITY = 0.02, AUTOIONIZATION_COOLDOWN = 30;
 const ION_RECOMBINATION_COOLDOWN = 60;
 const COULOMB_CONSTANT = 2.5, MIN_DISTANCE = 8;
-const FRICTION = 0.995, BOUNDS_DAMPING = 0.95, ROTATIONAL_FRICTION = 0.985;
-const THERMOSTAT_GAIN = 0.05; // FIXED: Added missing constant
+const FRICTION = 0.999, BOUNDS_DAMPING = 0.95, ROTATIONAL_FRICTION = 0.985;
 const COLLISION_POINTS = {
     'H2O': [[0, 0, 6], [-10, 9, 3], [10, 9, 3]],
     'CH4': [[0, 0, 8], [12, 0, 3], [0, 12, 3], [-12, 0, 3], [0, -12, 3]],
@@ -227,24 +220,9 @@ class Molecule {
         ctx.beginPath(); ctx.arc(0, -bondLen, hRad, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
     }
     update() {
-        // Apply friction
         this.vx *= FRICTION; this.vy *= FRICTION;
         if (ROTATIONAL_MOLECULES.includes(this.type)) { this.rotSpeed += this.torque * 0.01; this.rotSpeed *= ROTATIONAL_FRICTION; this.torque = 0; }
         this.x += this.vx; this.y += this.vy; this.angle += this.rotSpeed;
-        
-        // Apply Thermostat Boost (Corrects speed based on energy input)
-        const mass = getMass(this.type);
-        const currentKE = 0.5 * mass * (this.vx * this.vx + this.vy * this.vy);
-        // If energy is below target, add small boost to velocity
-        if (currentKE < targetEnergy) {
-            const deficit = targetEnergy - currentKE;
-            // Add energy proportionally to mass to maintain correct scaling
-            const boost = Math.sqrt(2 * deficit / mass) * THERMOSTAT_GAIN;
-            const angle = Math.random() * Math.PI * 2;
-            this.vx += Math.cos(angle) * boost;
-            this.vy += Math.sin(angle) * boost;
-        }
-        
         const boundaryOffset = 5;
         if (this.x < boundaryOffset) { this.x = boundaryOffset; this.vx *= -BOUNDS_DAMPING; }
         else if (this.x > width - boundaryOffset) { this.x = width - boundaryOffset; this.vx *= -BOUNDS_DAMPING; }
@@ -327,15 +305,6 @@ function resolveCollisions() {
     }
 }
 
-function getMass(type) {
-    if(type === 'CH4') return 0.89;
-    if(type === 'C2H6') return 1.67;
-    if(type === 'H2') return 0.11;
-    if(type === 'H3O+') return 1.06;
-    if(type === 'OH-') return 0.94;
-    return 1.0; // H2O
-}
-
 function initMolecules() {
     molecules = [];
     for (let i = 0; i < waterMoleculeCount; i++) molecules.push(new Molecule('H2O'));
@@ -369,6 +338,9 @@ function physicsAndMeasure() {
                 }
             } if (minDist < Infinity) { sumDist += minDist; validDistances++; }
         }
+        
+        // CH4 Reaction logic REMOVED from here to prevent H3O+ from being marked as reacted incorrectly.
+        // The correct logic for CH4 reaction exists in processReactions where m2.type === 'CH4' is checked.
     } return { avgDist: validDistances > 0 ? sumDist / validDistances : 0, reactedIndices };
 }
 
@@ -455,7 +427,12 @@ function updateUI(avgDist) {
         if (m.type === 'OH-') oh++;
         
         // Kinetic energy
-        const mass = getMass(m.type);
+        let mass = 1.0;
+        if(m.type === 'CH4') mass = 0.89;
+        else if(m.type === 'C2H6') mass = 1.67;
+        else if(m.type === 'H2') mass = 0.11;
+        else if(m.type === 'H3O+') mass = 1.06;
+        else if(m.type === 'OH-') mass = 0.94;
         totalKE += 0.5 * mass * (m.vx * m.vx + m.vy * m.vy);
         
         // Speed in Angstroms per frame
@@ -463,20 +440,15 @@ function updateUI(avgDist) {
         totalSpeed += speed;
     });
     
-    // Fixed molecule count display - CH4/C2H6 colors corrected to be visible on dark background
-    moleculeCountEl.innerHTML = 
-        `<span style="color:#ff4d4d">${h2o}</span> H₂O + ` +
-        `<span style="color:#cccccc">${ch4}</span> CH₄ + ` +
-        `<span style="color:#cccccc">${c2h6}</span> C₂H₆ + ` +
-        `<span style="color:#ffffff">${h2}</span> H₂ + ` +
-        `<span class="hydronium-text">${h3o}</span> H₃O⁺ + ` +
-        `<span class="hydroxide-text">${oh}</span> OH⁻`;
+    // Fixed molecule count display with proper HTML span coloring
+    moleculeCountEl.innerHTML = `<span style="color:#ff4d4d">${h2o}</span> H₂O + <span style="color:#000000">${ch4}</span> CH₄ + <span style="color:#000000">${c2h6}</span> C₂H₆ + <span style="color:#ffffff">${h2}</span> H₂ + <span class="hydronium-text">${h3o}</span> H₃O⁺ + <span class="hydroxide-text">${oh}</span> OH⁻`;
     
     const avgEnergy = totalKE / (molecules.length || 1);
     const avgSpeed = totalSpeed / (molecules.length || 1);
     
-    energyEl.innerText = avgEnergy.toFixed(2);
-    energyEl.style.color = Math.abs(avgEnergy - targetEnergy) > 0.05 ? '#ff4444' : '#00d2ff';
+    energyEl.innerText = avgEnergy.toFixed(1);
+    energyEl.style.color = Math.abs(avgEnergy - (lastEnergy || 0)) > 0.005 ? '#ff4444' : '#00d2ff';
+    lastEnergy = avgEnergy;
     
     speedEl.innerText = avgSpeed.toFixed(2);
     speedEl.style.color = '#00ff88';
@@ -485,14 +457,10 @@ function updateUI(avgDist) {
     if (total > 0) { const h3o_conc = h3o / total; phEl.innerText = (-Math.log10(h3o_conc + 0.000001)).toFixed(2); } else { phEl.innerText = '7.00'; }
 }
 
-let lastTime = Date.now(), frameCount = 0;
+let lastTime = Date.now(), frameCount = 0, lastEnergy = 0;
 
 function draw() {
     currentFrame++; ctx.fillStyle = '#414245'; ctx.fillRect(0, 0, width, height);
-    
-    // Update Target Energy
-    targetEnergy = parseFloat(energyInput.value) || 0.4;
-    
     let { avgDist, reactedIndices } = physicsAndMeasure();
     processReactions(reactedIndices);
     applyElectrostaticForces();
